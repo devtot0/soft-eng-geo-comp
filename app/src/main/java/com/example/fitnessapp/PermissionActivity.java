@@ -32,6 +32,7 @@ public class PermissionActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         if (ContextCompat.checkSelfPermission(PermissionActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            startActivity(new Intent(PermissionActivity.this, MapActivity.class));
             finish();
             return;
         }
