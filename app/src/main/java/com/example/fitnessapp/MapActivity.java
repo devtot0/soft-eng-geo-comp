@@ -5,6 +5,7 @@ import android.content.IntentSender;
 import android.location.Location;
 import android.os.Bundle;
 
+import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.common.api.ResolvableApiException;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
@@ -26,28 +27,36 @@ import com.google.android.gms.tasks.Task;
 import com.google.android.libraries.places.api.Places;
 import com.google.android.libraries.places.api.model.AutocompletePrediction;
 import com.google.android.libraries.places.api.model.AutocompleteSessionToken;
+import com.google.android.libraries.places.api.model.Place;
 import com.google.android.libraries.places.api.model.TypeFilter;
+import com.google.android.libraries.places.api.net.FetchPlaceRequest;
+import com.google.android.libraries.places.api.net.FetchPlaceResponse;
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest;
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsResponse;
 import com.google.android.libraries.places.api.net.PlacesClient;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.snackbar.Snackbar;
 import com.mancj.materialsearchbar.MaterialSearchBar;
+import com.mancj.materialsearchbar.adapter.SuggestionsAdapter;
+import com.skyfishjy.library.RippleBackground;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 
+import android.os.Handler;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.view.View;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.RelativeLayout;
 import android.widget.Toast;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class MapActivity extends AppCompatActivity implements OnMapReadyCallback {
@@ -63,6 +72,7 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
     private MaterialSearchBar materialSearchBar;
     private View mapView;
     private Button btnFind;
+    private RippleBackground rippleBg;
 
     private final float DEFAULT_ZOOM = 18;
 
@@ -73,6 +83,7 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
 
         materialSearchBar = findViewById(R.id.searchBar);
         btnFind = findViewById(R.id.btn_find);
+        rippleBg = findViewById(R.id.ripple_bg);
 
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
@@ -146,21 +157,97 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
 
             }
         });
+
+        materialSearchBar.setSuggestionsClickListener(new SuggestionsAdapter.OnItemViewClickListener() {
+            @Override
+            public void OnItemClickListener(int position, View v) {
+                if(position >= predictionList.size()){
+                    return;
+                }
+                AutocompletePrediction selectedPrediction = predictionList.get(position);
+                String suggestion = materialSearchBar.getLastSuggestions().get(position).toString();
+                materialSearchBar.setText(suggestion);
+
+                new Handler().postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        materialSearchBar.clearSuggestions();
+                    }
+                }, 1000);
+
+                materialSearchBar.clearSuggestions();
+                InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                if(imm != null){
+                    imm.hideSoftInputFromWindow(materialSearchBar.getWindowToken(), InputMethodManager.HIDE_IMPLICIT_ONLY);
+                    String placeId = selectedPrediction.getPlaceId();
+                    List<Place.Field> placeFields = Arrays.asList(Place.Field.LAT_LNG);
+
+                    FetchPlaceRequest fetchPlaceRequest = FetchPlaceRequest.builder(placeId, placeFields).build();
+                    placesClient.fetchPlace(fetchPlaceRequest).addOnSuccessListener(new OnSuccessListener<FetchPlaceResponse>() {
+                        @Override
+                        public void onSuccess(FetchPlaceResponse fetchPlaceResponse) {
+                            Place place = fetchPlaceResponse.getPlace();
+                            Log.i("mytag", "Place found: " + place.getName());
+                            LatLng latLngOfPlace = place.getLatLng();
+                            if(latLngOfPlace != null){
+                                mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLngOfPlace, DEFAULT_ZOOM));
+                            }
+                        }
+                    }).addOnFailureListener(new OnFailureListener() {
+                        @Override
+                        public void onFailure(@NonNull Exception e) {
+                            if(e instanceof ApiException){
+                                ApiException apiException = (ApiException) e;
+                                apiException.printStackTrace();
+                                int statusCode = apiException.getStatusCode();
+                                Log.i("mytag", "place not found: " + e.getMessage());
+                                Log.i("mytag", "status code: " + statusCode);
+                            }
+                        }
+                    });
+                }
+            }
+
+            @Override
+            public void OnItemDeleteListener(int position, View v) {
+
+            }
+        });
+
+        btnFind.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                LatLng currentMarkerLocation = mMap.getCameraPosition().target;
+                rippleBg.startRippleAnimation();
+                new Handler().postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        //rippleBg.stopRippleAnimation();
+                        rippleBg.clearAnimation();
+                        //start activity
+                        //startActivity(new Intent(MapActivity.this, MapActivity.class));
+                        //finish();
+                    }
+                }, 3000);
+            }
+        });
     }
 
 
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
+        mMap.setMyLocationEnabled(true);
         mMap.setBuildingsEnabled(true);
         mMap.getUiSettings().setMyLocationButtonEnabled(true);
-
         if (mapView != null && mapView.findViewById(Integer.parseInt("1")) != null) {
+            //View locationButton = ((View) mapView.findViewById(Integer.parseInt("1")).getParent()).findViewById(Integer.parseInt("4"));
             View locationButton = ((View) mapView.findViewById(Integer.parseInt("1")).getParent()).findViewById(Integer.parseInt("2"));
             RelativeLayout.LayoutParams layoutParams = (RelativeLayout.LayoutParams) locationButton.getLayoutParams();
             layoutParams.addRule(RelativeLayout.ALIGN_PARENT_TOP, 0);
             layoutParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM, RelativeLayout.TRUE);
-            layoutParams.setMargins(0, 0, 40, 180);
+            layoutParams.setMargins(0, 0, 200, 180);
+
         }
         //check if gps is enabled or not and then request user to enable it
         LocationRequest locationRequest = LocationRequest.create();
@@ -191,6 +278,18 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
                         ex.printStackTrace();
                     }
                 }
+            }
+        });
+        mMap.setOnMyLocationButtonClickListener(new GoogleMap.OnMyLocationButtonClickListener() {
+            @Override
+            public boolean onMyLocationButtonClick() {
+                if(materialSearchBar.isSuggestionsVisible()){
+                    materialSearchBar.clearSuggestions();
+                }
+                if(materialSearchBar.isSearchEnabled()){
+                    materialSearchBar.disableSearch();
+                }
+                return false;
             }
         });
     }
