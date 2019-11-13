@@ -222,10 +222,10 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
                 new Handler().postDelayed(new Runnable() {
                     @Override
                     public void run() {
-                        //rippleBg.stopRippleAnimation();
+                        rippleBg.stopRippleAnimation();
                         rippleBg.clearAnimation();
                         //start activity
-                        //startActivity(new Intent(MapActivity.this, MapActivity.class));
+                        startActivity(new Intent(MapActivity.this, MapActivity.class));
                         //finish();
                     }
                 }, 3000);
