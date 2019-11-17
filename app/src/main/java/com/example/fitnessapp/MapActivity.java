@@ -5,6 +5,8 @@ import android.content.IntentSender;
 import android.location.Location;
 import android.os.Bundle;
 
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.common.api.ResolvableApiException;
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -75,6 +77,7 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
     private RippleBackground rippleBg;
 
     private final float DEFAULT_ZOOM = 18;
+    private final int PROXIMITY_RADIUS = 5000;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -85,7 +88,7 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
         btnFind = findViewById(R.id.btn_find);
         rippleBg = findViewById(R.id.ripple_bg);
 
-        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
+        final SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
         mapView = mapFragment.getView();
 
@@ -131,17 +134,17 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
                 placesClient.findAutocompletePredictions(predictionsRequest).addOnCompleteListener(new OnCompleteListener<FindAutocompletePredictionsResponse>() {
                     @Override
                     public void onComplete(@NonNull Task<FindAutocompletePredictionsResponse> task) {
-                        if(task.isSuccessful()){
+                        if (task.isSuccessful()) {
                             FindAutocompletePredictionsResponse predictionsResponse = task.getResult();
-                            if(predictionsResponse != null){
+                            if (predictionsResponse != null) {
                                 predictionList = predictionsResponse.getAutocompletePredictions();
                                 List<String> suggestionsList = new ArrayList<>();
-                                for(int i = 0; i < predictionList.size(); i++){
+                                for (int i = 0; i < predictionList.size(); i++) {
                                     AutocompletePrediction prediction = predictionList.get(i);
                                     suggestionsList.add(prediction.getFullText(null).toString());
                                 }
                                 materialSearchBar.updateLastSuggestions(suggestionsList);
-                                if(!materialSearchBar.isSuggestionsVisible()){
+                                if (!materialSearchBar.isSuggestionsVisible()) {
                                     materialSearchBar.showSuggestionsList();
                                 }
                             }
@@ -161,7 +164,7 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
         materialSearchBar.setSuggestionsClickListener(new SuggestionsAdapter.OnItemViewClickListener() {
             @Override
             public void OnItemClickListener(int position, View v) {
-                if(position >= predictionList.size()){
+                if (position >= predictionList.size()) {
                     return;
                 }
                 AutocompletePrediction selectedPrediction = predictionList.get(position);
@@ -177,7 +180,7 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
 
                 materialSearchBar.clearSuggestions();
                 InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
-                if(imm != null){
+                if (imm != null) {
                     imm.hideSoftInputFromWindow(materialSearchBar.getWindowToken(), InputMethodManager.HIDE_IMPLICIT_ONLY);
                     String placeId = selectedPrediction.getPlaceId();
                     List<Place.Field> placeFields = Arrays.asList(Place.Field.LAT_LNG);
@@ -189,14 +192,14 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
                             Place place = fetchPlaceResponse.getPlace();
                             Log.i("mytag", "Place found: " + place.getName());
                             LatLng latLngOfPlace = place.getLatLng();
-                            if(latLngOfPlace != null){
+                            if (latLngOfPlace != null) {
                                 mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLngOfPlace, DEFAULT_ZOOM));
                             }
                         }
                     }).addOnFailureListener(new OnFailureListener() {
                         @Override
                         public void onFailure(@NonNull Exception e) {
-                            if(e instanceof ApiException){
+                            if (e instanceof ApiException) {
                                 ApiException apiException = (ApiException) e;
                                 apiException.printStackTrace();
                                 int statusCode = apiException.getStatusCode();
@@ -217,6 +220,7 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
         btnFind.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                /*
                 LatLng currentMarkerLocation = mMap.getCameraPosition().target;
                 rippleBg.startRippleAnimation();
                 new Handler().postDelayed(new Runnable() {
@@ -229,6 +233,20 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
                         //finish();
                     }
                 }, 3000);
+                */
+                if (btnFind.getText().equals("Find Gyms")) {
+                    Log.d("onClick", "Button is Clicked");
+                    mMap.clear();
+                    String url = getUrl(mLastKnownLocation.getLatitude(), mLastKnownLocation.getLongitude(), "gym");
+                    Object[] DataTransfer = new Object[2];
+                    DataTransfer[0] = mMap;
+                    DataTransfer[1] = url;
+                    Log.d("onClick", url);
+                    GetNearbyPlacesData getNearbyPlacesData = new GetNearbyPlacesData();
+                    getNearbyPlacesData.execute(DataTransfer);
+                    Toast.makeText(MapActivity.this, "Nearby Gyms", Toast.LENGTH_LONG).show();
+                    //btnFind.setText("Clear Map");
+                }
             }
         });
     }
@@ -283,10 +301,10 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
         mMap.setOnMyLocationButtonClickListener(new GoogleMap.OnMyLocationButtonClickListener() {
             @Override
             public boolean onMyLocationButtonClick() {
-                if(materialSearchBar.isSuggestionsVisible()){
+                if (materialSearchBar.isSuggestionsVisible()) {
                     materialSearchBar.clearSuggestions();
                 }
-                if(materialSearchBar.isSearchEnabled()){
+                if (materialSearchBar.isSearchEnabled()) {
                     materialSearchBar.disableSearch();
                 }
                 return false;
@@ -339,4 +357,17 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
                     }
                 });
     }
+
+    private String getUrl(double latitude, double longitude, String nearbyPlace) {
+
+        StringBuilder googlePlacesUrl = new StringBuilder("https://maps.googleapis.com/maps/api/place/nearbysearch/json?");
+        googlePlacesUrl.append("location=" + latitude + "," + longitude);
+        googlePlacesUrl.append("&radius=" + PROXIMITY_RADIUS);
+        googlePlacesUrl.append("&type=" + nearbyPlace);
+        googlePlacesUrl.append("&sensor=true");
+        googlePlacesUrl.append("&key=" + "AIzaSyATuUiZUkEc_UgHuqsBJa1oqaODI-3mLs0");
+        Log.d("getUrl", googlePlacesUrl.toString());
+        return (googlePlacesUrl.toString());
+    }
+
 }
